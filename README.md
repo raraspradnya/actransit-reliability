@@ -1,11 +1,41 @@
 # AC Transit Reliability
 
-Collects live AC Transit GTFS-Realtime data (from the AC Transit API and 511.org) every 5
-minutes, so we have a history to model delays and route fragility. Both APIs only show the
-*current* state, so the history exists only because we save it.
+A growing history of live bus data from **AC Transit**, the public bus operator for the East
+Bay (Oakland, Berkeley, Richmond, Hayward, Fremont and nearby cities, plus Transbay routes to
+San Francisco). We use it to model delays and how fragile each route is.
 
-**The collector is already running. There is nothing to set up.** API keys and the
-schedule are in place; you only need to pull the data and read it.
+**The collector is already running on GitHub. You don't need to set anything up**: no API
+keys, no scripts to run. Just pull the repo and read the data.
+
+## Data sources
+
+Both sources publish live data in **GTFS-Realtime**, the standard format transit agencies
+use for real-time information (it's what powers live arrival times in Google Maps and
+transit apps). We save two of its feeds:
+
+- **Trip updates**: for every bus trip in progress, the *predicted* arrival and departure
+  time at its upcoming stops.
+- **Vehicle positions**: where every bus is right now: location, speed, heading, which stop
+  it's at or approaching, and how crowded it is.
+
+We pull both feeds from two places:
+
+| Source | What it is |
+|---|---|
+| [AC Transit API](https://api.actransit.org/transit) | AC Transit's own developer API. |
+| [511.org](https://511.org/open-data/transit) | The Bay Area's regional open-data portal, run by the Metropolitan Transportation Commission. Republishes feeds from all Bay Area agencies; we request AC Transit only. |
+
+They describe the same buses, so they mostly agree, but they use different stop IDs and
+generate their feeds at slightly different times. Keeping both gives a backup if one is
+down and lets us cross-check.
+
+These feeds only show what's happening **right now**; neither keeps a history. So every
+~5 minutes we save a snapshot. On a weekday midday that's about 300 buses on roughly 60
+routes and ~2,300 stop predictions per feed.
+
+We also save AC Transit's **static GTFS schedule** (`data/static/`): the planned timetable,
+routes and stops. The live feeds don't report delays directly, so the schedule is what we
+compare predicted times against.
 
 ## Getting the data
 
@@ -106,9 +136,34 @@ To check that it's healthy: look at the "Latest" column in `data/report.html`, o
 | `fetch_static.py` | Downloads the static GTFS schedule to `data/static/`. |
 | `explore.ipynb` | Loads all collected data into pandas. |
 
-Running the scripts yourself needs your own API keys (`ACT_TOKEN` from
-https://api.actransit.org/transit, `API_511_KEY` from https://511.org/open-data/token),
-set as environment variables. You don't need them to read the data.
+## Running the scripts locally (optional)
+
+You don't need to do this: GitHub already collects everything, and reading the data needs
+no keys. It's only for testing changes to the scripts, or collecting faster than every 5
+minutes from your own computer.
+
+The API keys used on GitHub are stored as repository secrets and can't be copied, so you
+need your own (both free):
+
+1. Get the keys:
+   - `ACT_TOKEN`: register at https://api.actransit.org/transit
+   - `API_511_KEY`: request one at https://511.org/open-data/token
+2. Set them in your terminal (never commit them to the repo):
+   ```bash
+   export ACT_TOKEN=your_actransit_token
+   export API_511_KEY=your_511_key
+   ```
+3. Run what you need:
+   ```bash
+   python collect.py              # one snapshot of every feed
+   python collect.py --loop 60    # keep polling every 60 s until you stop it (Ctrl+C)
+   python fetch_static.py         # download the static schedule
+   ```
+
+If a key isn't set, `collect.py` skips that source and says so. Snapshots you collect
+locally go into the same `data/raw/` folders; commit and push them if you want to share them.
+Don't run `report.py` locally; GitHub regenerates the report, and a local copy will block
+your next `git pull` (fix with `git checkout data/report.html`).
 
 ## Known limits
 
