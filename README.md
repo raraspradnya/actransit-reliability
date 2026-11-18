@@ -1,13 +1,39 @@
 # AC Transit Reliability
 
-A growing history of live bus data from **AC Transit**, the public bus operator for the East
-Bay (Oakland, Berkeley, Richmond, Hayward, Fremont and nearby cities, plus Transbay routes to
-San Francisco). We use it to model delays and how fragile each route is.
+Predicting bus delays and measuring how fragile each route is, for **AC Transit**, the
+public bus operator for the East Bay (Oakland, Berkeley, Richmond, Hayward, Fremont and
+nearby cities, plus Transbay routes to San Francisco).
+
+## Background
+
+This project addresses the chronic uncertainty of public transit reliability across the East
+Bay by predicting how far buses deviate from their scheduled arrival times and modeling
+route-level service fragility, using historical AC Transit performance data. Daily bus riders
+frequently face unpredictable delays and cascading schedule disruptions, which make everyday
+route choices and decisions about where to live a gamble.
+
+The primary stakeholders for this work are:
+
+- **East Bay commuters**: UC Berkeley students, campus workers and local residents.
+- **AC Transit service planners**, who want to find systematic bottlenecks on route segments
+  so they can target schedule recalibration.
+
+## Project parts
+
+| Part | Status | What it does |
+|---|---|---|
+| [Data collector](#data-collector) | Running | Saves live AC Transit bus data every 5 minutes, since no public source keeps a history. |
+| Analysis and ML app | Planned | Will use the collected data to analyze delays, predict arrival deviations and score route fragility. |
+
+## Data collector
+
+A growing history of live bus data from AC Transit, collected so we can model delays and how
+fragile each route is.
 
 **The collector is already running on GitHub. You don't need to set anything up**: no API
 keys, no scripts to run. Just pull the repo and read the data.
 
-## Data sources
+### Data sources
 
 Both sources publish live data in **GTFS-Realtime**, the standard format transit agencies
 use for real-time information (it's what powers live arrival times in Google Maps and
@@ -37,7 +63,7 @@ We also save AC Transit's **static GTFS schedule** (`data/static/`): the planned
 routes and stops. The live feeds don't report delays directly, so the schedule is what we
 compare predicted times against.
 
-## Getting the data
+### Getting the data
 
 ```bash
 git clone https://github.com/raraspradnya/actransit-reliability.git
@@ -47,7 +73,7 @@ pip install -r requirements.txt
 
 New snapshots are committed every ~5 minutes, so run `git pull` whenever you want the latest.
 
-## Looking at what's been collected
+### Looking at what's been collected
 
 **Quick look: `data/report.html`.** Open it in a browser after `git pull`. It's regenerated
 after every collection and shows:
@@ -72,7 +98,7 @@ trips = pd.concat(pd.read_csv(f, dtype=ids) for f in sorted(glob.glob("data/raw/
 
 Read the ID columns as text, or route names like `51A` and stop IDs can get mangled.
 
-## What's in the data
+### What's in the data
 
 Files are at `data/raw/YYYY-MM-DD/HHMMSS_<source>_<feed>.csv.gz`. The folder date and file
 time are **UTC** (Pacific + 8 h in winter), so evening Pacific data lands in the next day's
@@ -103,7 +129,7 @@ Things to know before analyzing:
 - **Codes.** `current_status`, `occupancy_status` and `schedule_relationship` are
   GTFS-Realtime codes; their meanings are in the report and the notebook.
 
-## How collection works
+### How collection works
 
 - `.github/workflows/collect-realtime.yml` runs `collect.py`, which saves one snapshot of
   each feed, then `report.py`, and commits the new files.
@@ -118,7 +144,7 @@ Things to know before analyzing:
 To check that it's healthy: look at the "Latest" column in `data/report.html`, or the
 **Actions** tab on GitHub. Each run's log lists `[ok]` or `[fail]` per feed.
 
-## If something stops
+### If something stops
 
 - **Report shows the latest snapshot as hours old, or runs disappear from the Actions tab:**
   the cron-job.org job or its GitHub token may have expired. GitHub's own schedule keeps
@@ -127,7 +153,7 @@ To check that it's healthy: look at the "Latest" column in `data/report.html`, o
   at AC Transit or 511. One failed feed doesn't stop the others.
 - **Manual run:** Actions tab → *collect-realtime* → *Run workflow*.
 
-## Files
+### Files
 
 | File | What it does |
 |---|---|
@@ -136,7 +162,7 @@ To check that it's healthy: look at the "Latest" column in `data/report.html`, o
 | `fetch_static.py` | Downloads the static GTFS schedule to `data/static/`. |
 | `explore.ipynb` | Loads all collected data into pandas. |
 
-## Running the scripts locally (optional)
+### Running the scripts locally (optional)
 
 You don't need to do this: GitHub already collects everything, and reading the data needs
 no keys. It's only for testing changes to the scripts, or collecting faster than every 5
@@ -165,7 +191,7 @@ locally go into the same `data/raw/` folders; commit and push them if you want t
 Don't run `report.py` locally; GitHub regenerates the report, and a local copy will block
 your next `git pull` (fix with `git checkout data/report.html`).
 
-## Known limits
+### Known limits
 
 - Gaps happen when both triggers miss; check snapshots per day in the report.
 - Each trip keeps only its next 5 predicted stops per snapshot (`STOPS_PER_TRIP` in
