@@ -12,7 +12,15 @@ minutes so we have a history to model delays and route fragility. Both APIs only
    - `ACT_TOKEN`: token from https://api.actransit.org/transit
    - `API_511_KEY`: key from https://511.org/open-data/token
 3. *Settings > Actions > General > Workflow permissions* -> **Read and write permissions**.
-4. *Actions tab > collect-realtime > Run workflow* to test. Then it runs every ~5 minutes.
+4. *Actions tab > collect-realtime > Run workflow* to test.
+5. Also trigger it every 5 minutes from [cron-job.org](https://cron-job.org), since GitHub's own
+   scheduler runs late or skips. Both stay on; either keeps data coming if the other stops:
+   - Create a fine-grained token at *GitHub > Settings > Developer settings > Personal access
+     tokens > Fine-grained*: only this repository, permission **Actions: Read and write**.
+   - New cron job, every 5 minutes, **POST** to
+     `https://api.github.com/repos/<owner>/<repo>/actions/workflows/collect-realtime.yml/dispatches`
+     with headers `Authorization: Bearer <token>`, `Accept: application/vnd.github+json`
+     and body `{"ref":"main"}`. A working call returns HTTP 204.
 
 Check the first run's log for `[ok]` lines. If a feed says `[fail]`, fix it before leaving it running.
 
@@ -24,9 +32,12 @@ pip install -r requirements.txt
 git pull          # run before analysis to get the newest snapshots
 ```
 
-To see what's been collected: open `explore.ipynb` and **Run All**. It pulls the newest
-snapshots, summarizes them per source and day, and shows all four tables as
-`trips_511`, `veh_511`, `trips_act` and `veh_act`.
+To see what's been collected: `git pull`, then open `data/report.html` in a browser. Every
+collector run regenerates it (`report.py`): totals and gaps per source and feed, snapshots
+per day and hour, the newest snapshot of each feed, and what every column means.
+
+To work with the full data in pandas, open `explore.ipynb` and **Run All**. It loads every
+snapshot as `trips_511`, `veh_511`, `trips_act` and `veh_act`.
 
 Note: neither feed fills in `arrival_delay` / `departure_delay`; they only give predicted
 times. Delays have to be computed against the static schedule in `data/static`, which the
