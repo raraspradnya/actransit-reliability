@@ -24,13 +24,13 @@ pip install -r requirements.txt
 git pull          # run before analysis to get the newest snapshots
 ```
 
-Load the data:
+To see what's been collected: open `explore.ipynb` and **Run All**. It pulls the newest
+snapshots, summarizes them per source and day, and shows all four tables as
+`trips_511`, `veh_511`, `trips_act` and `veh_act`.
 
-```python
-import glob, pandas as pd
-trips = pd.concat(pd.read_csv(f) for f in glob.glob("data/raw/*/*_511_trips.csv.gz"))
-veh   = pd.concat(pd.read_csv(f) for f in glob.glob("data/raw/*/*_511_vehicles.csv.gz"))
-```
+Note: neither feed fills in `arrival_delay` / `departure_delay`; they only give predicted
+times. Delays have to be computed against the static schedule in `data/static`, which the
+workflow downloads weekly.
 
 ## Data layout
 
