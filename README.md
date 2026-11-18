@@ -1,71 +1,119 @@
 # AC Transit Reliability
 
-Collects live AC Transit GTFS-Realtime data (from the AC Transit API and 511.org) every few
-minutes so we have a history to model delays and route fragility. Both APIs only expose the
-*current* state, so the history exists only if we save it ourselves.
+Collects live AC Transit GTFS-Realtime data (from the AC Transit API and 511.org) every 5
+minutes, so we have a history to model delays and route fragility. Both APIs only show the
+*current* state, so the history exists only because we save it.
 
-## One-time setup (one person)
+**The collector is already running. There is nothing to set up.** API keys and the
+schedule are in place; you only need to pull the data and read it.
 
-1. Create a **public** GitHub repo (public = unlimited free Actions minutes) and push this folder.
-2. Everyone's API keys stay out of the repo. Add two secrets under
-   *Settings > Secrets and variables > Actions*:
-   - `ACT_TOKEN`: token from https://api.actransit.org/transit
-   - `API_511_KEY`: key from https://511.org/open-data/token
-3. *Settings > Actions > General > Workflow permissions* -> **Read and write permissions**.
-4. *Actions tab > collect-realtime > Run workflow* to test.
-5. Also trigger it every 5 minutes from [cron-job.org](https://cron-job.org), since GitHub's own
-   scheduler runs late or skips. Both stay on; either keeps data coming if the other stops:
-   - Create a fine-grained token at *GitHub > Settings > Developer settings > Personal access
-     tokens > Fine-grained*: only this repository, permission **Actions: Read and write**.
-   - New cron job, every 5 minutes, **POST** to
-     `https://api.github.com/repos/<owner>/<repo>/actions/workflows/collect-realtime.yml/dispatches`
-     with headers `Authorization: Bearer <token>`, `Accept: application/vnd.github+json`
-     and body `{"ref":"main"}`. A working call returns HTTP 204.
-
-Check the first run's log for `[ok]` lines. If a feed says `[fail]`, fix it before leaving it running.
-
-## Everyone else
+## Getting the data
 
 ```bash
-git clone <repo-url> && cd ac-transit-reliability
+git clone https://github.com/raraspradnya/actransit-reliability.git
+cd actransit-reliability
 pip install -r requirements.txt
-git pull          # run before analysis to get the newest snapshots
 ```
 
-To see what's been collected: `git pull`, then open `data/report.html` in a browser. Every
-collector run regenerates it (`report.py`): totals and gaps per source and feed, snapshots
-per day and hour, the newest snapshot of each feed, and what every column means.
+New snapshots are committed every ~5 minutes, so run `git pull` whenever you want the latest.
 
-To work with the full data in pandas, open `explore.ipynb` and **Run All**. It loads every
-snapshot as `trips_511`, `veh_511`, `trips_act` and `veh_act`.
+## Looking at what's been collected
 
-Note: neither feed fills in `arrival_delay` / `departure_delay`; they only give predicted
-times. Delays have to be computed against the static schedule in `data/static`, which the
-workflow downloads weekly.
+**Quick look: `data/report.html`.** Open it in a browser after `git pull`. It's regenerated
+after every collection and shows:
 
-## Data layout
+- each source and feed: number of snapshots, first and latest, gaps between snapshots, size
+  (the latest time turns orange or red if collection has stopped)
+- snapshots per day and per hour, to spot missing periods (a full day is ~288 per feed)
+- the newest snapshot of each feed, with timestamps in Pacific time and codes labeled
+- what every column means and how often it's filled
 
-`data/raw/YYYY-MM-DD/HHMMSS_<source>_<trips|vehicles>.csv.gz` (UTC), `source` is `act` or `511`.
+**Full data in pandas: `explore.ipynb`.** Open it and **Run All**. It runs `git pull`, then
+loads every snapshot into four DataFrames: `trips_511`, `veh_511`, `trips_act`, `veh_act`.
+Add your own cells below. The notebook also has a full column reference.
 
-- **trips**: per trip, the next 5 predicted stops (`stop_rank` 0 = next stop) with
-  `arrival_delay` / `departure_delay` in seconds vs. schedule. These are *predictions*, so
-  the delay at `stop_rank` 0 just before a bus passes is our best proxy for the actual delay.
-- **vehicles**: bus position, current stop, status, speed, occupancy.
-- `fetched_at` = when we polled (unix), `feed_ts` = when the agency generated the feed.
-- Static schedule: `python fetch_static.py` (saves GTFS zips to `data/static/`).
+Or load the files directly:
 
-## Run a faster collector locally (optional)
-
-GitHub's scheduler can't go below 5 minutes and often lags. Anyone with an always-on
-machine can poll every 60 s and share the files:
-
-```bash
-export ACT_TOKEN=... API_511_KEY=...
-python collect.py --loop 60
+```python
+import glob, pandas as pd
+ids = {c: str for c in ["trip_id", "route_id", "vehicle_id", "stop_id", "start_date", "start_time"]}
+trips = pd.concat(pd.read_csv(f, dtype=ids) for f in sorted(glob.glob("data/raw/*/*_511_trips.csv.gz")))
 ```
+
+Read the ID columns as text, or route names like `51A` and stop IDs can get mangled.
+
+## What's in the data
+
+Files are at `data/raw/YYYY-MM-DD/HHMMSS_<source>_<feed>.csv.gz`. The folder date and file
+time are **UTC** (Pacific + 8 h in winter), so evening Pacific data lands in the next day's
+folder.
+
+| Source | `<source>` | Notes |
+|---|---|---|
+| 511.org | `511` | Has `direction_id` on vehicles. |
+| AC Transit API | `act` | Same buses; uses a different set of stop IDs than 511. |
+
+| Feed | `<feed>` | One row per |
+|---|---|---|
+| Trip updates | `trips` | trip × upcoming stop: the next 5 predicted stops of each active trip (`stop_rank` 0 = next stop) |
+| Vehicle positions | `vehicles` | bus: location, speed, heading, current stop, crowding |
+
+Things to know before analyzing:
+
+- **No delays are reported.** `arrival_delay` and `departure_delay` are always empty in both
+  feeds. The feeds only give *predicted* times (`arrival_time`, `departure_time`, unix
+  seconds). Delay = predicted time − scheduled time, using the static schedule in
+  `data/static/` (GTFS zips, refreshed weekly). The latest prediction just before a bus
+  reaches a stop is the best proxy for its actual arrival.
+- **Duplicates.** Two runs can land seconds apart and get the identical feed (same
+  `feed_ts`). Drop exact repeats before counting:
+  `df.drop_duplicates(subset=[c for c in df.columns if c not in ("fetched_at", "fetched_dt")])`
+- **Times.** `fetched_at` = when we polled, `feed_ts` = when the agency built the feed,
+  `timestamp` = when the bus reported its position. All unix seconds (UTC).
+- **Codes.** `current_status`, `occupancy_status` and `schedule_relationship` are
+  GTFS-Realtime codes; their meanings are in the report and the notebook.
+
+## How collection works
+
+- `.github/workflows/collect-realtime.yml` runs `collect.py`, which saves one snapshot of
+  each feed, then `report.py`, and commits the new files.
+- It's triggered every 5 minutes by **cron-job.org** (calling GitHub's API), and also by
+  GitHub's own 5-minute schedule as a backup. GitHub's scheduler is often late or skips,
+  which is why cron-job.org is the main trigger. Having both sometimes produces two
+  snapshots close together; that's expected (see Duplicates).
+- The AC Transit and 511 API keys are stored as GitHub secrets (`ACT_TOKEN`, `API_511_KEY`),
+  not in the code.
+- The static schedule is re-downloaded automatically when the newest copy is over 7 days old.
+
+To check that it's healthy: look at the "Latest" column in `data/report.html`, or the
+**Actions** tab on GitHub. Each run's log lists `[ok]` or `[fail]` per feed.
+
+## If something stops
+
+- **Report shows the latest snapshot as hours old, or runs disappear from the Actions tab:**
+  the cron-job.org job or its GitHub token may have expired. GitHub's own schedule keeps
+  running in the meantime, just less regularly. Ask the repo owner, who manages both.
+- **A run fails with `[fail]` for a feed:** usually an API key problem or a temporary outage
+  at AC Transit or 511. One failed feed doesn't stop the others.
+- **Manual run:** Actions tab → *collect-realtime* → *Run workflow*.
+
+## Files
+
+| File | What it does |
+|---|---|
+| `collect.py` | Fetches one snapshot of each feed and saves the CSVs. |
+| `report.py` | Builds `data/report.html`. |
+| `fetch_static.py` | Downloads the static GTFS schedule to `data/static/`. |
+| `explore.ipynb` | Loads all collected data into pandas. |
+
+Running the scripts yourself needs your own API keys (`ACT_TOKEN` from
+https://api.actransit.org/transit, `API_511_KEY` from https://511.org/open-data/token),
+set as environment variables. You don't need them to read the data.
 
 ## Known limits
 
-- Scheduled Actions runs are best-effort; gaps happen. Check `data/raw` file counts per day.
-- Data volume: check repo size after day 1. If it's growing too fast, lower `STOPS_PER_TRIP`
-  in `collect.py` or collect only for chosen routes.
+- Gaps happen when both triggers miss; check snapshots per day in the report.
+- Each trip keeps only its next 5 predicted stops per snapshot (`STOPS_PER_TRIP` in
+  `collect.py`), to keep files small.
+- The repo grows with every snapshot. If cloning gets slow, use
+  `git clone --depth 1` to skip the history.
