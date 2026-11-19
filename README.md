@@ -63,6 +63,15 @@ We also save AC Transit's **static GTFS schedule** (`data/static/`): the planned
 routes and stops. The live feeds don't report delays directly, so the schedule is what we
 compare predicted times against.
 
+And **hourly weather** (`data/weather/`) from [Open-Meteo](https://open-meteo.com/), a free
+weather service, as a possible cause of delays: rain, temperature, wind, visibility (fog),
+cloud cover. It covers November 2026 onward, matching our bus data (earlier months can be
+added with `python fetch_weather.py --start YYYY-MM`), at 7 points across the service area: downtown Oakland, Berkeley, Richmond, San Leandro,
+Hayward, Fremont and the SF Transbay Terminal. Unlike the bus feeds, weather history is
+already available, so this is downloaded rather than polled; it's modeled from
+high-resolution weather models (not a single station), so there are no gaps. One file per
+month, one row per location per hour (UTC). Match each stop to its nearest location.
+
 ### Getting the data
 
 ```bash
@@ -86,7 +95,8 @@ after every collection and shows:
 
 **Full data in pandas: `explore.ipynb`.** Open it and **Run All**. It runs `git pull`, then
 loads every snapshot into four DataFrames: `trips_511`, `veh_511`, `trips_act`, `veh_act`.
-Add your own cells below. The notebook also has a full column reference.
+It also loads the weather as `weather`. Add your own cells below. The notebook also has a
+full column reference.
 
 Or load the files directly:
 
@@ -140,6 +150,8 @@ Things to know before analyzing:
 - The AC Transit and 511 API keys are stored as GitHub secrets (`ACT_TOKEN`, `API_511_KEY`),
   not in the code.
 - The static schedule is re-downloaded automatically when the newest copy is over 7 days old.
+- Weather is topped up by `fetch_weather.py` in the same workflow. It only downloads when
+  the newest hour is over a day old, so in practice once a day. No API key needed.
 
 To check that it's healthy: look at the "Latest" column in `data/report.html`, or the
 **Actions** tab on GitHub. Each run's log lists `[ok]` or `[fail]` per feed.
@@ -160,6 +172,7 @@ To check that it's healthy: look at the "Latest" column in `data/report.html`, o
 | `collect.py` | Fetches one snapshot of each feed and saves the CSVs. |
 | `report.py` | Builds `data/report.html`. |
 | `fetch_static.py` | Downloads the static GTFS schedule to `data/static/`. |
+| `fetch_weather.py` | Downloads hourly weather to `data/weather/` (from November 2026; fills any gaps). |
 | `explore.ipynb` | Loads all collected data into pandas. |
 
 ### Running the scripts locally (optional)
@@ -184,6 +197,7 @@ need your own (both free):
    python collect.py              # one snapshot of every feed
    python collect.py --loop 60    # keep polling every 60 s until you stop it (Ctrl+C)
    python fetch_static.py         # download the static schedule
+   python fetch_weather.py        # weather; needs no key
    ```
 
 If a key isn't set, `collect.py` skips that source and says so. Snapshots you collect

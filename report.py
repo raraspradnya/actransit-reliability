@@ -161,6 +161,55 @@ def gap_stats(times):
     return f"{gaps[len(gaps) // 2]:.1f}", f"{gaps[-1]:.0f}"
 
 
+WEATHER_COLUMNS = {
+    "time_utc": "Start of the hour, UTC (YYYY-MM-DDTHH:00).",
+    "location": "Named point in the service area; join each stop to its nearest one.",
+    "lat": "Latitude of the point.",
+    "lon": "Longitude of the point.",
+    "temp_c": "Air temperature at 2 m, °C.",
+    "precip_mm": "Total precipitation (rain + showers + snow) in the hour, mm.",
+    "rain_mm": "Rain in the hour, mm.",
+    "weather_code": "WMO weather code: 0 clear, 1-3 cloudy, 45/48 fog, 51-57 drizzle, "
+                    "61-67 rain, 80-82 showers, 95-99 thunderstorm.",
+    "cloud_cover_pct": "Cloud cover, %.",
+    "visibility_m": "Visibility, meters (low values = fog).",
+    "wind_kmh": "Wind speed at 10 m, km/h.",
+    "wind_gust_kmh": "Strongest gust in the hour, km/h.",
+}
+
+
+def weather_section():
+    files = sorted((ROOT / "data" / "weather").glob("*.csv.gz"))
+    out = ["<h2>Weather</h2>"]
+    if not files:
+        return out + ["<p>No weather data yet.</p>"]
+    header, latest = read_csv(files[-1])
+    rows_total = 0
+    for f in files:
+        with gzip.open(f, "rt") as fh:
+            rows_total += sum(1 for _ in fh) - 1
+    locs = sorted({r[1] for r in latest})
+    newest = max(r[0] for r in latest)
+    out.append(
+        f'<p class="muted">Hourly, from Open-Meteo (modeled, not a single station). '
+        f"{len(files)} monthly files in <code>data/weather/</code>, {files[0].name[:7]} to "
+        f"{files[-1].name[:7]}, {rows_total:,} rows, {len(locs)} locations. "
+        f"Newest hour {local(datetime.strptime(newest, '%Y-%m-%dT%H:%M').replace(tzinfo=timezone.utc).timestamp()):%Y-%m-%d %H:%M}.</p>")
+    out.append("<details><summary>Columns</summary>")
+    out.append(table(["Column", "Meaning"],
+                     [[f"<code>{esc(c)}</code>", esc(WEATHER_COLUMNS.get(c, ""))] for c in header],
+                     wrap_cols=(1,)))
+    out.append("</details>")
+    recent = sorted(latest, key=lambda r: (r[0], r[1]), reverse=True)[:24 * len(locs)]
+    out.append("<details><summary>Last 24 hours</summary>")
+    out.append('<div class="scroll">' + table(
+        ["Time (Pacific)"] + header[1:2] + header[4:],
+        [[f"{local(datetime.strptime(r[0], '%Y-%m-%dT%H:%M').replace(tzinfo=timezone.utc).timestamp()):%m-%d %H:00}",
+          esc(r[1])] + [esc(v) for v in r[4:]] for r in recent]) + "</div>")
+    out.append("</details>")
+    return out
+
+
 def build():
     idx = index_files()
     now = datetime.now(TZ)
@@ -213,6 +262,8 @@ def build():
                     [[f"{h:%a %m-%d %H:00}"] + [per_hour[h][k] for k in keys] for h in recent],
                     num_cols=range(1, len(keys) + 1)),
               "</div></details>"]
+
+    parts += weather_section()
 
     # Latest snapshot of each feed, with column reference
     for (src, feed), files in sorted(idx.items()):
