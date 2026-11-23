@@ -3,3 +3,5 @@ __pycache__/
 .DS_Store
 .env
 .venv/
+data/toronto/*.zip
+data/toronto/route_hour.parquet
