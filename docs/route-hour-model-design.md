@@ -50,7 +50,7 @@ AC Transit's APIs keep no history, so the team's collector (`collect.py`) has on
 data/toronto/ttc-bus-delay-data-2022.csv   raw, moved here from data/ (committed, 2 MB)
 data/toronto/weather_2022.csv              Open-Meteo hourly, downloaded by eda.ipynb if missing (committed, small)
 data/toronto/opendata_ttc_schedules.zip    current TTC GTFS, downloaded if missing (git-ignored, 29 MB)
-data/toronto/route_hour.parquet            the modeling table, written by eda.ipynb (git-ignored, rebuildable)
+data/toronto/route_hour.parquet            the modeling table, written by toronto_eda.ipynb (committed, 5 MB, so modeling needs no rebuild)
 toronto_eda.ipynb                          renamed from eda.ipynb; part 1 (existing) + part 2: build and explore the route-hour table
 toronto_model.ipynb                        baseline -> Poisson regression -> gradient-boosted trees
 ```
@@ -116,4 +116,4 @@ Every calendar date gets a source link in a markdown cell, and the dates are che
 - Split at 30 Apr.
 - Move the Toronto CSV into `data/toronto/` and prefix both notebooks with `toronto_`.
 - Add scikit-learn and pyarrow to `requirements.txt`.
-- Commit the small Toronto data; ignore the GTFS zip and the parquet.
+- Commit the small Toronto data and the modeling table; ignore the GTFS zip.
